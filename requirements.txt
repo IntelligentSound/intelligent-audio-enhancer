@@ -1,0 +1,9 @@
+torch
+torchvision
+librosa
+numpy
+pydub
+scikit-learn
+imbalanced-learn
+joblib
+tensorboard
