@@ -1,105 +1,84 @@
-# feature_extraction.py
-
-
 import librosa
 import numpy as np
-import inspect
+from spleeter.separator import Separator
 
-def extract_features(file_path, fixed_length=100, sr=22050):
+def separate_audio(file_path, output_dir="separated_audio"):
     """
-    Extracts MFCC features from an audio file.
+    Separates audio into ingredients (vocals, drums, bass, etc.) using Spleeter.
 
     Parameters:
         file_path (str): Path to the audio file.
-        fixed_length (int): Fixed number of time frames.
-        sr (int): Sampling rate.
+        output_dir (str): Directory to save separated audio files.
 
     Returns:
-        np.ndarray: Extracted MFCC features of shape (40, 100) or None if extraction fails.
+        dict: Paths to separated audio files (vocals, drums, bass, etc.).
+    """
+    try:
+        # Initialize Spleeter with a pre-trained model
+        separator = Separator('spleeter:4stems')  # Separate into vocals, drums, bass, and others
+        separator.separate_to_file(file_path, output_dir)
+
+        # File paths to separated components
+        separated_files = {
+            "vocals": f"{output_dir}/{file_path.split('/')[-1].replace('.wav', '')}/vocals.wav",
+            "drums": f"{output_dir}/{file_path.split('/')[-1].replace('.wav', '')}/drums.wav",
+            "bass": f"{output_dir}/{file_path.split('/')[-1].replace('.wav', '')}/bass.wav",
+            "other": f"{output_dir}/{file_path.split('/')[-1].replace('.wav', '')}/other.wav"
+        }
+
+        return separated_files
+    except Exception as e:
+        print(f"Error during audio separation: {e}")
+        return None
+
+
+def extract_advanced_features(file_path, sr=22050, fixed_length=100):
+    """
+    Extracts advanced audio features including chromagram, spectral contrast, zero-crossing rate, 
+    tonal centroid (tonnetz), and onset strength.
+
+    Parameters:
+        file_path (str): Path to the audio file.
+        sr (int): Sampling rate.
+        fixed_length (int): Fixed number of time frames.
+
+    Returns:
+        np.ndarray: Combined feature array of shape (n_features, fixed_length).
     """
     try:
         y, sr = librosa.load(file_path, sr=sr)
+
+        # Extract individual features
         mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=40)
-        # Pad or truncate to fixed_length
-        if mfcc.shape[1] < fixed_length:
-            pad_width = fixed_length - mfcc.shape[1]
-            mfcc = np.pad(mfcc, pad_width=((0, 0), (0, pad_width)), mode='constant')
-        else:
-            mfcc = mfcc[:, :fixed_length]
-        return mfcc
+        chroma = librosa.feature.chroma_stft(y=y, sr=sr)
+        spectral_contrast = librosa.feature.spectral_contrast(y=y, sr=sr)
+        zero_crossing_rate = librosa.feature.zero_crossing_rate(y=y)
+        onset_strength = librosa.onset.onset_strength(y=y, sr=sr)
+        tonnetz = librosa.feature.tonnetz(y=librosa.effects.harmonic(y), sr=sr)
+
+        # Standardize lengths by truncating or padding
+        def pad_or_truncate(feature):
+            if feature.shape[1] < fixed_length:
+                pad_width = fixed_length - feature.shape[1]
+                feature = np.pad(feature, ((0, 0), (0, pad_width)), mode='constant')
+            else:
+                feature = feature[:, :fixed_length]
+            return feature
+
+        # Apply padding/truncation
+        mfcc = pad_or_truncate(mfcc)
+        chroma = pad_or_truncate(chroma)
+        spectral_contrast = pad_or_truncate(spectral_contrast)
+        zero_crossing_rate = pad_or_truncate(zero_crossing_rate)
+        onset_strength = np.pad(onset_strength, (0, max(0, fixed_length - len(onset_strength))), mode='constant')[:fixed_length]
+        tonnetz = pad_or_truncate(tonnetz)
+
+        # Combine features into a single array
+        combined_features = np.vstack([
+            mfcc, chroma, spectral_contrast, zero_crossing_rate, tonnetz, onset_strength[np.newaxis, :]
+        ])
+
+        return combined_features
     except Exception as e:
-        print(f"Error extracting features from {file_path}: {e}")
+        print(f"Error extracting advanced features from {file_path}: {e}")
         return None
-
-def extract_features_from_signal(y, fixed_length=100, sr=22050):
-    """
-    Extracts MFCC features from an audio signal array.
-
-    Parameters:
-        y (np.ndarray): Audio signal.
-        fixed_length (int): Fixed number of time frames.
-        sr (int): Sampling rate.
-
-    Returns:
-        np.ndarray: Extracted MFCC features of shape (40, 100) or None if extraction fails.
-    """
-    try:
-        mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=40)
-        # Pad or truncate to fixed_length
-        if mfcc.shape[1] < fixed_length:
-            pad_width = fixed_length - mfcc.shape[1]
-            mfcc = np.pad(mfcc, pad_width=((0, 0), (0, pad_width)), mode='constant')
-        else:
-            mfcc = mfcc[:, :fixed_length]
-        return mfcc
-    except Exception as e:
-        print(f"Error extracting features from signal: {e}")
-        return None
-
-def add_noise(y, noise_factor=0.005):
-    """
-    Adds random noise to an audio signal for data augmentation.
-
-    Parameters:
-        y (np.ndarray): Original audio signal.
-        noise_factor (float): Factor to control noise level.
-
-    Returns:
-        np.ndarray: Noisy audio signal.
-    """
-    noise = np.random.randn(len(y))
-    y_noisy = y + noise_factor * noise
-    # Cast back to same data type
-    y_noisy = y_noisy.astype(type(y[0]))
-    return y_noisy
-
-def augment_time_stretch(y, rate=1.05):
-    """
-    Stretches the audio signal by a given rate for data augmentation.
-
-    Parameters:
-        y (np.ndarray): Original audio signal.
-        rate (float): Stretch factor.
-
-    Returns:
-        np.ndarray: Time-stretched audio signal.
-    """
-    try:
-        y_stretched = librosa.effects.time_stretch(y, rate=rate)  # Keyword argument
-        return y_stretched
-    except Exception as e:
-        print(f"Error in time stretching: {e}")
-        return y  # Return original audio if time stretching fails
-
-if __name__ == "__main__":
-    # Example usage for testing
-    import sys
-    if len(sys.argv) != 2:
-        print("Usage: python feature_extraction.py <audio_file>")
-    else:
-        file_path = sys.argv[1]
-        features = extract_features(file_path)
-        if features is not None:
-            print(f"Extracted features shape: {features.shape}")
-        else:
-            print("Feature extraction failed.")

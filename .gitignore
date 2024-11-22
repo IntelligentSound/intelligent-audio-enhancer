@@ -121,7 +121,6 @@ dmypy.json
 *.log
 
 # Large files
-enhanced_genre_classifier.pth
 *.dll
 *.lib
 
