@@ -13,10 +13,3 @@ An AI-driven audio equalizer that automatically adjusts audio settings based on 
 - **Logging**: Detailed logs for monitoring and debugging.
 - **Unit Tests**: Ensures reliability of feature extraction and genre prediction.
 
-## Setup
-
-### 1. Clone the Repository
-
-```bash
-git clone https://github.com/yourusername/ai-audio-equalizer.git
-cd ai-audio-equalizer
