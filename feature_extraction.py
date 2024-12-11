@@ -1,6 +1,7 @@
 import librosa
 import numpy as np
 from spleeter.separator import Separator
+from openl3 import process_file
 
 def separate_audio(file_path, output_dir="separated_audio"):
     """
@@ -32,10 +33,9 @@ def separate_audio(file_path, output_dir="separated_audio"):
         return None
 
 
-def extract_advanced_features(file_path, sr=22050, fixed_length=100):
+def extract_features_with_openl3(file_path, sr=22050, fixed_length=100):
     """
-    Extracts advanced audio features including chromagram, spectral contrast, zero-crossing rate, 
-    tonal centroid (tonnetz), and onset strength.
+    Extracts audio features using OpenL3 embeddings and additional audio features.
 
     Parameters:
         file_path (str): Path to the audio file.
@@ -46,15 +46,17 @@ def extract_advanced_features(file_path, sr=22050, fixed_length=100):
         np.ndarray: Combined feature array of shape (n_features, fixed_length).
     """
     try:
+        # Load audio
         y, sr = librosa.load(file_path, sr=sr)
 
-        # Extract individual features
-        mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=40)
-        chroma = librosa.feature.chroma_stft(y=y, sr=sr)
-        spectral_contrast = librosa.feature.spectral_contrast(y=y, sr=sr)
-        zero_crossing_rate = librosa.feature.zero_crossing_rate(y=y)
-        onset_strength = librosa.onset.onset_strength(y=y, sr=sr)
-        tonnetz = librosa.feature.tonnetz(y=librosa.effects.harmonic(y), sr=sr)
+        # OpenL3 Embeddings
+        embeddings, _ = process_file(file_path, input_repr="mel256", content_type="music")
+        embeddings = embeddings.T  # Transpose for compatibility
+
+        # Additional features
+        tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
+        spectral_bandwidth = librosa.feature.spectral_bandwidth(y=y, sr=sr)
+        rmse = librosa.feature.rms(y=y)
 
         # Standardize lengths by truncating or padding
         def pad_or_truncate(feature):
@@ -66,19 +68,14 @@ def extract_advanced_features(file_path, sr=22050, fixed_length=100):
             return feature
 
         # Apply padding/truncation
-        mfcc = pad_or_truncate(mfcc)
-        chroma = pad_or_truncate(chroma)
-        spectral_contrast = pad_or_truncate(spectral_contrast)
-        zero_crossing_rate = pad_or_truncate(zero_crossing_rate)
-        onset_strength = np.pad(onset_strength, (0, max(0, fixed_length - len(onset_strength))), mode='constant')[:fixed_length]
-        tonnetz = pad_or_truncate(tonnetz)
+        embeddings = pad_or_truncate(embeddings)
+        spectral_bandwidth = pad_or_truncate(spectral_bandwidth)
+        rmse = pad_or_truncate(rmse)
 
         # Combine features into a single array
-        combined_features = np.vstack([
-            mfcc, chroma, spectral_contrast, zero_crossing_rate, tonnetz, onset_strength[np.newaxis, :]
-        ])
+        combined_features = np.vstack([embeddings, spectral_bandwidth, rmse])
 
         return combined_features
     except Exception as e:
-        print(f"Error extracting advanced features from {file_path}: {e}")
+        print(f"Error extracting features from {file_path}: {e}")
         return None
