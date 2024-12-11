@@ -3,6 +3,7 @@ from sklearn.preprocessing import LabelEncoder
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, TensorDataset
+from feature_extraction import extract_features_with_torchaudio, separate_audio
 
 def load_data_with_separation(audio_files, genres, fixed_length=100, use_separation=True):
     """
@@ -29,12 +30,12 @@ def load_data_with_separation(audio_files, genres, fixed_length=100, use_separat
             if use_separation:
                 separated_files = separate_audio(file_path)
                 for ingredient, ingredient_path in separated_files.items():
-                    features = extract_features_with_openl3(ingredient_path, fixed_length=fixed_length)
+                    features = extract_features_with_torchaudio(ingredient_path, fixed_length=fixed_length)
                     if features is not None:
                         X.append(features)
                         y.append(label)
             else:
-                features = extract_features_with_openl3(file_path, fixed_length=fixed_length)
+                features = extract_features_with_torchaudio(file_path, fixed_length=fixed_length)
                 if features is not None:
                     X.append(features)
                     y.append(label)

@@ -40,36 +40,6 @@ def train_adjustment_model(X_train, y_train):
     return model
 
 
-def train_genre_specific_models(features, adjustments, genres):
-    """
-    Train separate adjustment models for each genre.
-
-    Parameters:
-        features (np.ndarray): Extracted audio features.
-        adjustments (list): Desired adjustments for audio components.
-        genres (list): Genre labels corresponding to features.
-
-    Returns:
-        dict: Genre-specific adjustment models.
-    """
-    genre_models = {}
-    unique_genres = np.unique(genres)
-
-    for genre in unique_genres:
-        genre_indices = [i for i, g in enumerate(genres) if g == genre]
-        X_genre = features[genre_indices]
-        y_genre = adjustments[genre_indices]
-        X_train, X_test, y_train, y_test, scaler = prepare_adjustment_data(X_genre, y_genre)
-        model = train_adjustment_model(X_train, y_train)
-        genre_models[genre] = {
-            "model": model,
-            "scaler": scaler
-        }
-        print(f"Trained adjustment model for genre: {genre}")
-
-    return genre_models
-
-
 def enhance_audio(audio_path, feature_extractor, adjustment_model, scaler):
     """
     Enhance audio based on a trained adjustment model and extracted features.

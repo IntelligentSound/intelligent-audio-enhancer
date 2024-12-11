@@ -7,3 +7,7 @@ scikit-learn
 imbalanced-learn
 joblib
 tensorboard
+spleeter
+openl3
+Flask
+

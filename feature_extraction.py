@@ -1,7 +1,7 @@
 import librosa
+import torchaudio
 import numpy as np
 from spleeter.separator import Separator
-from openl3 import process_file
 
 def separate_audio(file_path, output_dir="separated_audio"):
     """
@@ -15,11 +15,9 @@ def separate_audio(file_path, output_dir="separated_audio"):
         dict: Paths to separated audio files (vocals, drums, bass, etc.).
     """
     try:
-        # Initialize Spleeter with a pre-trained model
         separator = Separator('spleeter:4stems')  # Separate into vocals, drums, bass, and others
         separator.separate_to_file(file_path, output_dir)
 
-        # File paths to separated components
         separated_files = {
             "vocals": f"{output_dir}/{file_path.split('/')[-1].replace('.wav', '')}/vocals.wav",
             "drums": f"{output_dir}/{file_path.split('/')[-1].replace('.wav', '')}/drums.wav",
@@ -33,9 +31,9 @@ def separate_audio(file_path, output_dir="separated_audio"):
         return None
 
 
-def extract_features_with_openl3(file_path, sr=22050, fixed_length=100):
+def extract_features_with_torchaudio(file_path, sr=22050, fixed_length=100):
     """
-    Extracts audio features using OpenL3 embeddings and additional audio features.
+    Extracts audio features using torchaudio and additional features.
 
     Parameters:
         file_path (str): Path to the audio file.
@@ -46,19 +44,21 @@ def extract_features_with_openl3(file_path, sr=22050, fixed_length=100):
         np.ndarray: Combined feature array of shape (n_features, fixed_length).
     """
     try:
-        # Load audio
-        y, sr = librosa.load(file_path, sr=sr)
+        waveform, sr = torchaudio.load(file_path)
 
-        # OpenL3 Embeddings
-        embeddings, _ = process_file(file_path, input_repr="mel256", content_type="music")
-        embeddings = embeddings.T  # Transpose for compatibility
+        # Resample if necessary
+        if sr != 22050:
+            resampler = torchaudio.transforms.Resample(orig_freq=sr, new_freq=22050)
+            waveform = resampler(waveform)
 
-        # Additional features
-        tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
-        spectral_bandwidth = librosa.feature.spectral_bandwidth(y=y, sr=sr)
-        rmse = librosa.feature.rms(y=y)
+        # Compute mel spectrogram
+        mel_spectrogram = torchaudio.transforms.MelSpectrogram(sample_rate=22050)(waveform).numpy()
 
-        # Standardize lengths by truncating or padding
+        # Additional features using librosa
+        mfcc = librosa.feature.mfcc(S=librosa.power_to_db(mel_spectrogram[0]), sr=22050, n_mfcc=40)
+        chroma = librosa.feature.chroma_stft(S=librosa.power_to_db(mel_spectrogram[0]), sr=22050)
+
+        # Pad or truncate to fixed_length
         def pad_or_truncate(feature):
             if feature.shape[1] < fixed_length:
                 pad_width = fixed_length - feature.shape[1]
@@ -67,13 +67,12 @@ def extract_features_with_openl3(file_path, sr=22050, fixed_length=100):
                 feature = feature[:, :fixed_length]
             return feature
 
-        # Apply padding/truncation
-        embeddings = pad_or_truncate(embeddings)
-        spectral_bandwidth = pad_or_truncate(spectral_bandwidth)
-        rmse = pad_or_truncate(rmse)
+        mel_spectrogram = pad_or_truncate(mel_spectrogram[0])
+        mfcc = pad_or_truncate(mfcc)
+        chroma = pad_or_truncate(chroma)
 
         # Combine features into a single array
-        combined_features = np.vstack([embeddings, spectral_bandwidth, rmse])
+        combined_features = np.vstack([mel_spectrogram, mfcc, chroma])
 
         return combined_features
     except Exception as e:
